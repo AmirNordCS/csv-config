@@ -1,0 +1,53 @@
+name: Process CSV and Commit (Go)
+
+on:
+  push:
+    # This workflow runs when you push to the `main` branch of the
+    # repository where this file is located (e.g., csv-config).
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repo with the script (csv-config)
+      # This checks out the repository that this workflow file is in.
+      - name: Checkout Local Repo (csv-config)
+        uses: actions/checkout@v4
+        with:
+          path: csv-config
+
+      # Step 2: Checkout the repo with the CSV file (csv-firewall)
+      # This is the most important change. We use a Personal Access Token (PAT)
+      # stored in secrets to get write access to the other repository.
+      - name: Checkout Remote Repo (csv-firewall)
+        uses: actions/checkout@v4
+        with:
+          repository: AmirNordCS/csv-firewall
+          token: ${{ secrets.CROSS_REPO_PAT }} # <-- CRITICAL CHANGE: Use a PAT, not GITHUB_TOKEN
+          path: csv-firewall
+
+      # Step 3: Set up Go environment
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      # Step 4: Run the CSV processing script
+      # We must specify the working directory so Go knows where to find the script.
+      - name: Run the CSV processing script
+        working-directory: ./csv-config # <-- ADDED: Run from the correct directory
+        run: go run ./scripts/process.go
+
+      # Step 5: Commit and push changes back to the csv-firewall repo
+      # We must specify the working directory to ensure we commit to the correct repo.
+      - name: Commit and push if it changed
+        working-directory: ./csv-firewall # <-- ADDED: Perform git operations in the remote repo's directory
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/all-config.csv # <-- CHANGED: Be specific about which file to add
+          git commit -m "Update all-config.csv with new data" || exit 0
+          git push
